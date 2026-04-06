@@ -7,6 +7,6 @@ export default defineConfig({
   plugins: [
     solidStart(),
     tailwindcss(),
-    nitro({ preset: "bun" })
+    nitro({ preset: "node-server" })
   ]
 });
