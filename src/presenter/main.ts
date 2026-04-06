@@ -10,6 +10,8 @@ import { createApiPersonRepository } from "../data/repository/adapter/client/api
 import { createLoginViewModel } from "./viewmodel/login.vm";
 import { createUsersListViewModel } from "./viewmodel/users-list.vm";
 import { createUserDetailViewModel } from "./viewmodel/user-detail.vm";
+import { createProjectsListViewModel } from "./viewmodel/projects-list.vm";
+import { createProjectDetailViewModel } from "./viewmodel/project-detail.vm";
 
 const boot = async (): Promise<void> => {
   const root = document.getElementById("app");
@@ -54,6 +56,19 @@ const boot = async (): Promise<void> => {
       userId: p["id"]!,
       userRepo,
       grantRepo,
+      projectRepo,
+      router,
+      session: s,
+    }),
+  ));
+
+  router.register("/projects", guard((_p, s) =>
+    createProjectsListViewModel({ projectRepo, router, session: s }),
+  ));
+
+  router.register("/projects/:id", guard((p, s) =>
+    createProjectDetailViewModel({
+      projectId: p["id"]!,
       projectRepo,
       router,
       session: s,

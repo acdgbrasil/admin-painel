@@ -8,4 +8,7 @@ export interface UserRepository {
   readonly remove: (userId: string) => Promise<ApiResult<null>>;
   readonly deactivate: (userId: string) => Promise<ApiResult<null>>;
   readonly reactivate: (userId: string) => Promise<ApiResult<null>>;
+  readonly lock: (userId: string) => Promise<ApiResult<null>>;
+  readonly unlock: (userId: string) => Promise<ApiResult<null>>;
+  readonly resetPassword: (userId: string) => Promise<ApiResult<null>>;
 }

@@ -55,4 +55,7 @@ export const createZitadelUserRepository = (token: string): UserRepository => ({
   remove: (userId) => zitadelRequest(token, `/v2/users/${userId}`, { method: "DELETE" }),
   deactivate: (userId) => zitadelRequest(token, `/v2/users/${userId}/deactivate`, { method: "POST" }),
   reactivate: (userId) => zitadelRequest(token, `/v2/users/${userId}/activate`, { method: "POST" }),
+  lock: (userId) => zitadelRequest(token, `/v2/users/${userId}/lock`, { method: "POST" }),
+  unlock: (userId) => zitadelRequest(token, `/v2/users/${userId}/unlock`, { method: "POST" }),
+  resetPassword: (userId) => zitadelRequest(token, `/v2/users/${userId}/password_reset`, { method: "POST", body: JSON.stringify({}) }),
 });

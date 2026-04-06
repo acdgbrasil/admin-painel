@@ -157,6 +157,68 @@ export const createApiRouter = (auth: AuthService) =>
       const result = await listRoles(params.id);
       if (!result.ok) return jsonResponse({ error: result.message }, result.status);
       return jsonResponse(result.data);
+    })
+
+    .post("/projects/:id/roles", async ({ params, cookie, body }) => {
+      const session = await requireSession(auth, cookie as CookieJar);
+      if (!session) return unauthorized();
+
+      const repos = createRepos(session.accessToken);
+      const form = body as { roleKey: string };
+      const result = await repos.projectRepo.addRole(params.id, form.roleKey);
+      if (!result.ok) return jsonResponse({ error: result.message }, result.status);
+      return new Response(null, { status: 201 });
+    })
+
+    .delete("/projects/:id/roles/:roleKey", async ({ params, cookie }) => {
+      const session = await requireSession(auth, cookie as CookieJar);
+      if (!session) return unauthorized();
+
+      const repos = createRepos(session.accessToken);
+      const result = await repos.projectRepo.removeRole(params.id, params.roleKey);
+      if (!result.ok) return jsonResponse({ error: result.message }, result.status);
+      return new Response(null, { status: 204 });
+    })
+
+    .get("/projects/:id/users", async ({ params, cookie }) => {
+      const session = await requireSession(auth, cookie as CookieJar);
+      if (!session) return unauthorized();
+
+      const repos = createRepos(session.accessToken);
+      const result = await repos.projectRepo.listUsersWithGrants(params.id);
+      if (!result.ok) return jsonResponse({ error: result.message }, result.status);
+      return jsonResponse(result.data);
+    })
+
+    // ─── User actions ──────────────────────────────────────
+    .post("/users/:id/lock", async ({ params, cookie }) => {
+      const session = await requireSession(auth, cookie as CookieJar);
+      if (!session) return unauthorized();
+
+      const repos = createRepos(session.accessToken);
+      const result = await repos.userRepo.lock(params.id);
+      if (!result.ok) return jsonResponse({ error: result.message }, result.status);
+      return new Response(null, { status: 204 });
+    })
+
+    .post("/users/:id/unlock", async ({ params, cookie }) => {
+      const session = await requireSession(auth, cookie as CookieJar);
+      if (!session) return unauthorized();
+
+      const repos = createRepos(session.accessToken);
+      const result = await repos.userRepo.unlock(params.id);
+      if (!result.ok) return jsonResponse({ error: result.message }, result.status);
+      return new Response(null, { status: 204 });
+    })
+
+    .post("/users/:id/reset-password", async ({ params, cookie }) => {
+      const session = await requireSession(auth, cookie as CookieJar);
+      if (!session) return unauthorized();
+
+      const repos = createRepos(session.accessToken);
+      const result = await repos.userRepo.resetPassword(params.id);
+      if (!result.ok) return jsonResponse({ error: result.message }, result.status);
+      return new Response(null, { status: 204 });
     });
 
 // ─── Repository factory (creates per-request with token) ────

@@ -9,4 +9,7 @@ export const createApiUserRepository = (http: HttpClient): UserRepository => ({
   remove: (userId) => http.del(`/api/v1/users/${userId}`),
   deactivate: (userId) => http.post(`/api/v1/users/${userId}/deactivate`),
   reactivate: (userId) => http.post(`/api/v1/users/${userId}/reactivate`),
+  lock: (userId) => http.post(`/api/v1/users/${userId}/lock`),
+  unlock: (userId) => http.post(`/api/v1/users/${userId}/unlock`),
+  resetPassword: (userId) => http.post(`/api/v1/users/${userId}/reset-password`),
 });

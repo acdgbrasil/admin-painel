@@ -27,6 +27,8 @@ const app = new Elysia()
   .get("/users", () => new Response(renderShell(), { headers: { "Content-Type": "text/html" } }))
   .get("/users/new", () => new Response(renderShell(), { headers: { "Content-Type": "text/html" } }))
   .get("/users/:id", () => new Response(renderShell(), { headers: { "Content-Type": "text/html" } }))
+  .get("/projects", () => new Response(renderShell(), { headers: { "Content-Type": "text/html" } }))
+  .get("/projects/:id", () => new Response(renderShell(), { headers: { "Content-Type": "text/html" } }))
   .get("/", ({ redirect }) => redirect("/users"))
 
   .listen({ port: PORT, hostname: HOST });
