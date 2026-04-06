@@ -1,106 +1,55 @@
+# CLAUDE.md — admin-painel
 
-Default to using Bun instead of Node.js.
+## Service
 
-- Use `bun <file>` instead of `node <file>` or `ts-node <file>`
-- Use `bun test` instead of `jest` or `vitest`
-- Use `bun build <file.html|file.ts|file.css>` instead of `webpack` or `esbuild`
-- Use `bun install` instead of `npm install` or `yarn install` or `pnpm install`
-- Use `bun run <script>` instead of `npm run <script>` or `yarn run <script>` or `pnpm run <script>`
-- Use `bunx <package> <command>` instead of `npx <package> <command>`
-- Bun automatically loads .env, so don't use dotenv.
+Admin panel for ACDG user management. Server-rendered HTML with HTMX interactivity, talking directly to the Zitadel Management API.
 
-## APIs
+## Commands
 
-- `Bun.serve()` supports WebSockets, HTTPS, and routes. Don't use `express`.
-- `bun:sqlite` for SQLite. Don't use `better-sqlite3`.
-- `Bun.redis` for Redis. Don't use `ioredis`.
-- `Bun.sql` for Postgres. Don't use `pg` or `postgres.js`.
-- `WebSocket` is built-in. Don't use `ws`.
-- Prefer `Bun.file` over `node:fs`'s readFile/writeFile
-- Bun.$`ls` instead of execa.
-
-## Testing
-
-Use `bun test` to run tests.
-
-```ts#index.test.ts
-import { test, expect } from "bun:test";
-
-test("hello world", () => {
-  expect(1).toBe(1);
-});
+```bash
+bun run dev          # Run with --hot (hot reload)
+bun run start        # Run production
+bun run typecheck    # TypeScript strict check
 ```
 
-## Frontend
+## Stack
 
-Use HTML imports with `Bun.serve()`. Don't use `vite`. HTML imports fully support React, CSS, Tailwind.
+- **Runtime**: Bun
+- **HTTP**: Elysia
+- **Templating**: Tagged template literals (no JSX, no build step)
+- **Interactivity**: HTMX (CDN)
+- **Styling**: Tailwind CSS (CDN)
+- **Auth**: OIDC Authorization Code flow, server-side (httpOnly cookie)
+- **API**: Zitadel Management API (direct fetch + Bearer token)
 
-Server:
+## Architecture
 
-```ts#index.ts
-import index from "./index.html"
-
-Bun.serve({
-  routes: {
-    "/": index,
-    "/api/users/:id": {
-      GET: (req) => {
-        return new Response(JSON.stringify({ id: req.params.id }));
-      },
-    },
-  },
-  // optional websocket support
-  websocket: {
-    open: (ws) => {
-      ws.send("Hello, world!");
-    },
-    message: (ws, message) => {
-      ws.send(message);
-    },
-    close: (ws) => {
-      // handle close
-    }
-  },
-  development: {
-    hmr: true,
-    console: true,
-  }
-})
+```
+src/
+├── index.ts      — Elysia app, all routes
+├── auth.ts       — OIDC server-side (login, callback, logout, cookie signing)
+├── zitadel.ts    — Zitadel Management API client (fetch + Bearer token)
+└── views/
+    ├── layout.ts       — HTML base (head, nav, Tailwind CDN, HTMX CDN)
+    ├── login.ts        — Login page
+    ├── users.ts        — User list with search
+    ├── user-detail.ts  — User detail + roles management
+    └── user-new.ts     — Create user form
 ```
 
-HTML files can import .tsx, .jsx or .js files directly and Bun's bundler will transpile & bundle automatically. `<link>` tags can point to stylesheets and Bun's CSS bundler will bundle.
+## Environment Variables
 
-```html#index.html
-<html>
-  <body>
-    <h1>Hello, world!</h1>
-    <script type="module" src="./frontend.tsx"></script>
-  </body>
-</html>
-```
+- `PORT` (default 3000)
+- `HOST` (default 0.0.0.0)
+- `OIDC_ISSUER` (default https://auth.acdgbrasil.com.br)
+- `OIDC_CLIENT_ID` (default 367357876898889878)
+- `OIDC_CLIENT_SECRET` — required for Authorization Code flow
+- `SESSION_SECRET` — HMAC key for cookie signing (required in production)
+- `BASE_URL` — public URL for redirect URIs (default http://localhost:3000)
 
-With the following `frontend.tsx`:
+## Conventions
 
-```tsx#frontend.tsx
-import React from "react";
-import { createRoot } from "react-dom/client";
-
-// import .css files directly and it works
-import './index.css';
-
-const root = createRoot(document.body);
-
-export default function Frontend() {
-  return <h1>Hello, world!</h1>;
-}
-
-root.render(<Frontend />);
-```
-
-Then, run index.ts
-
-```sh
-bun --hot ./index.ts
-```
-
-For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.
+- **No build step**: Bun runs TypeScript directly
+- **No client-side JS framework**: HTMX handles interactivity
+- **Server-side auth**: Tokens never reach the browser
+- **HTML escaping**: All user content escaped via `esc()` helper
