@@ -23,6 +23,10 @@ app.config.timestamp_*.js
 # Temp
 gitignore
 
+# Build output
+public/app.js
+public/app.js.map
+
 # System Files
 .DS_Store
 Thumbs.db

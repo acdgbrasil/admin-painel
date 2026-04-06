@@ -1,16 +1,17 @@
 {
   "name": "admin-painel",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "bun --hot src/index.ts",
-    "start": "bun src/index.ts",
-    "typecheck": "bunx tsc --noEmit"
+    "dev": "bun run build:client && bun --hot src/server/index.ts",
+    "build:client": "bun src/build.ts",
+    "start": "bun run build:client && bun src/server/index.ts",
+    "typecheck": "bunx tsc"
   },
   "dependencies": {
-    "elysia": "^1.3",
-    "@elysiajs/html": "^1.3"
+    "@elysiajs/html": "^1.3",
+    "elysia": "^1.3"
   },
   "devDependencies": {
     "@types/bun": "latest",
