@@ -14,7 +14,7 @@ const badge = (state: string) => {
   return `<span class="inline-block px-2 py-0.5 rounded text-xs font-medium ${s.cls}">${s.label}</span>`;
 };
 
-export const usersPage = (session: Session, users: ZitadelUser[], search?: string) =>
+export const usersPage = (session: Session, users: readonly ZitadelUser[], search?: string) =>
   layout(
     `<main class="container mx-auto p-6">
       <div class="flex items-center justify-between mb-6">
@@ -42,7 +42,7 @@ export const usersPage = (session: Session, users: ZitadelUser[], search?: strin
     session,
   );
 
-const usersTable = (users: ZitadelUser[]) => `
+const usersTable = (users: readonly ZitadelUser[]) => `
 <div class="bg-white rounded-lg shadow overflow-hidden">
   <table class="w-full">
     <thead class="bg-gray-50">

@@ -9,7 +9,7 @@ const STATE_LABELS: Record<string, { label: string; cls: string }> = {
   USER_STATE_INITIAL: { label: "Inicial", cls: "bg-yellow-100 text-yellow-800" },
 };
 
-export const userDetailPage = (session: Session, user: ZitadelUser, grants: UserGrant[], projects: Array<{ id: string; name: string }>) => {
+export const userDetailPage = (session: Session, user: ZitadelUser, grants: readonly UserGrant[], projects: readonly { readonly id: string; readonly name: string }[]) => {
   const badge = STATE_LABELS[user.state] ?? { label: user.state, cls: "bg-gray-100" };
   const canToggle = user.state === "USER_STATE_ACTIVE" || user.state === "USER_STATE_INACTIVE";
 
@@ -92,7 +92,7 @@ export const userDetailPage = (session: Session, user: ZitadelUser, grants: User
   );
 };
 
-const grantsSection = (userId: string, grants: UserGrant[]) => {
+const grantsSection = (userId: string, grants: readonly UserGrant[]) => {
   if (grants.length === 0) return `<p class="text-gray-400 text-sm">Nenhuma role atribuída.</p>`;
 
   return `<div class="space-y-2">
@@ -120,10 +120,10 @@ const grantsSection = (userId: string, grants: UserGrant[]) => {
 };
 
 // Partial for HTMX swap after grant add
-export const grantsPartial = (userId: string, grants: UserGrant[]) => grantsSection(userId, grants);
+export const grantsPartial = (userId: string, grants: readonly UserGrant[]) => grantsSection(userId, grants);
 
 // Partial for role options loaded via HTMX
-export const roleOptionsPartial = (roles: Array<{ key: string; displayName: string }>) => {
+export const roleOptionsPartial = (roles: readonly { readonly key: string; readonly displayName: string }[]) => {
   if (roles.length === 0) return `<p class="text-gray-400 text-sm">Nenhuma role disponível.</p>`;
   return `<div class="flex flex-wrap gap-2">
     ${roles

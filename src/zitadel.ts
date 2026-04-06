@@ -1,8 +1,20 @@
 // ─── Zitadel Management API client ───────────────────────────
-// Same logic as the SolidJS version, but receives token as parameter
-// instead of pulling from client-side auth.
+// Server-side only. Receives Bearer token as parameter.
 
 const BASE_URL = process.env["OIDC_ISSUER"] ?? "https://auth.acdgbrasil.com.br";
+
+// ─── Error type ──────────────────────────────────────────────
+
+export class ZitadelApiError extends Error {
+  readonly status: number;
+  readonly body: string;
+
+  constructor(status: number, body: string) {
+    super(`Zitadel API error ${status}: ${body}`);
+    this.status = status;
+    this.body = body;
+  }
+}
 
 // ─── HTTP helpers ────────────────────────────────────────────
 
@@ -21,72 +33,87 @@ const request = async <T>(token: string, path: string, options: RequestInit = {}
     throw new ZitadelApiError(res.status, body);
   }
 
-  if (res.status === 204) return undefined as T;
+  // 204 No Content — no body to parse
+  if (res.status === 204 || res.headers.get("content-length") === "0") {
+    return null as T;
+  }
+
   return res.json() as Promise<T>;
 };
 
-export class ZitadelApiError extends Error {
-  constructor(
-    public readonly status: number,
-    public readonly body: string,
-  ) {
-    super(`Zitadel API error ${status}: ${body}`);
-  }
-}
-
 // ─── Types ───────────────────────────────────────────────────
 
-export type ZitadelUser = {
-  userId: string;
-  state: string;
-  username: string;
-  loginNames: string[];
-  preferredLoginName: string;
-  human?: {
-    profile: {
-      firstName: string;
-      lastName: string;
-      displayName: string;
-    };
-    email: {
-      email: string;
-      isVerified: boolean;
-    };
-    phone?: {
-      phone: string;
-      isVerified: boolean;
-    };
-  };
-  details: {
-    sequence: string;
-    creationDate: string;
-    changeDate: string;
-    resourceOwner: string;
-  };
-};
+interface UserProfile {
+  readonly firstName: string;
+  readonly lastName: string;
+  readonly displayName: string;
+}
 
-export type UserGrant = {
-  id: string;
-  userId: string;
-  projectId: string;
-  projectName: string;
-  roleKeys: string[];
-  state: number;
-  details: {
-    creationDate: string;
-    changeDate: string;
-  };
-};
+interface UserEmail {
+  readonly email: string;
+  readonly isVerified: boolean;
+}
 
-export type ProjectRole = {
-  key: string;
-  displayName: string;
-  group: string;
-};
+interface UserPhone {
+  readonly phone: string;
+  readonly isVerified: boolean;
+}
+
+interface UserDetails {
+  readonly sequence: string;
+  readonly creationDate: string;
+  readonly changeDate: string;
+  readonly resourceOwner: string;
+}
+
+export interface ZitadelUser {
+  readonly userId: string;
+  readonly state: string;
+  readonly username: string;
+  readonly loginNames: readonly string[];
+  readonly preferredLoginName: string;
+  readonly human?: {
+    readonly profile: UserProfile;
+    readonly email: UserEmail;
+    readonly phone?: UserPhone;
+  };
+  readonly details: UserDetails;
+}
+
+export interface UserGrant {
+  readonly id: string;
+  readonly userId: string;
+  readonly projectId: string;
+  readonly projectName: string;
+  readonly roleKeys: readonly string[];
+  readonly state: number;
+  readonly details: {
+    readonly creationDate: string;
+    readonly changeDate: string;
+  };
+}
+
+export interface ProjectRole {
+  readonly key: string;
+  readonly displayName: string;
+  readonly group: string;
+}
+
+interface Project {
+  readonly id: string;
+  readonly name: string;
+}
+
+// ─── Response wrappers ───────────────────────────────────────
+
+interface ListResponse<T> {
+  readonly result?: readonly T[];
+  readonly details?: { readonly totalResult: string };
+}
 
 // ─── Users ───────────────────────────────────────────────────
 
-export const listUsers = async (token: string, search?: string) => {
+export const listUsers = async (token: string, search?: string): Promise<ListResponse<ZitadelUser>> => {
   const body: Record<string, unknown> = {
     query: { limit: 50, offset: 0 },
   };
@@ -100,27 +127,29 @@ export const listUsers = async (token: string, search?: string) => {
       },
     ];
   }
-  return request<{ result?: ZitadelUser[]; details?: { totalResult: string } }>(
+  return request<ListResponse<ZitadelUser>>(
     token,
     "/management/v1/users/_search",
     { method: "POST", body: JSON.stringify(body) },
   );
 };
 
-export const getUser = async (token: string, userId: string) =>
-  request<{ user: ZitadelUser }>(token, `/management/v1/users/${userId}`);
+export const getUser = async (token: string, userId: string): Promise<{ readonly user: ZitadelUser }> =>
+  request(token, `/management/v1/users/${userId}`);
+
+interface CreateUserInput {
+  readonly username: string;
+  readonly firstName: string;
+  readonly lastName: string;
+  readonly email: string;
+  readonly password?: string;
+}
 
 export const createHumanUser = async (
   token: string,
-  input: {
-    username: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-    password?: string;
-  },
-) =>
-  request<{ userId: string }>(token, "/v2/users/human", {
+  input: CreateUserInput,
+): Promise<{ readonly userId: string }> =>
+  request(token, "/v2/users/human", {
     method: "POST",
     body: JSON.stringify({
       username: input.username || input.email,
@@ -133,51 +162,53 @@ export const createHumanUser = async (
         email: input.email,
         isVerified: false,
       },
-      ...(input.password && {
-        password: {
-          password: input.password,
-          changeRequired: true,
-        },
-      }),
+      ...(input.password
+        ? { password: { password: input.password, changeRequired: true } }
+        : {}),
     }),
   });
 
-export const deleteUser = async (token: string, userId: string) =>
-  request<void>(token, `/v2/users/${userId}`, { method: "DELETE" });
+export const deleteUser = async (token: string, userId: string): Promise<null> =>
+  request(token, `/v2/users/${userId}`, { method: "DELETE" });
 
-export const deactivateUser = async (token: string, userId: string) =>
-  request<void>(token, `/v2/users/${userId}/deactivate`, { method: "POST" });
+export const deactivateUser = async (token: string, userId: string): Promise<null> =>
+  request(token, `/v2/users/${userId}/deactivate`, { method: "POST" });
 
-export const reactivateUser = async (token: string, userId: string) =>
-  request<void>(token, `/v2/users/${userId}/activate`, { method: "POST" });
+export const reactivateUser = async (token: string, userId: string): Promise<null> =>
+  request(token, `/v2/users/${userId}/activate`, { method: "POST" });
 
 // ─── User Grants (roles) ────────────────────────────────────
 
-export const listUserGrants = async (token: string, userId: string) =>
-  request<{ result?: UserGrant[] }>(token, "/management/v1/users/grants/_search", {
+export const listUserGrants = async (token: string, userId: string): Promise<ListResponse<UserGrant>> =>
+  request(token, "/management/v1/users/grants/_search", {
     method: "POST",
     body: JSON.stringify({ queries: [{ userIdQuery: { userId } }] }),
   });
 
-export const addUserGrant = async (token: string, userId: string, projectId: string, roleKeys: string[]) =>
-  request<{ userGrantId: string }>(token, `/management/v1/users/${userId}/grants`, {
+export const addUserGrant = async (
+  token: string,
+  userId: string,
+  projectId: string,
+  roleKeys: readonly string[],
+): Promise<{ readonly userGrantId: string }> =>
+  request(token, `/management/v1/users/${userId}/grants`, {
     method: "POST",
     body: JSON.stringify({ projectId, roleKeys }),
   });
 
-export const removeUserGrant = async (token: string, userId: string, grantId: string) =>
-  request<void>(token, `/management/v1/users/${userId}/grants/${grantId}`, { method: "DELETE" });
+export const removeUserGrant = async (token: string, userId: string, grantId: string): Promise<null> =>
+  request(token, `/management/v1/users/${userId}/grants/${grantId}`, { method: "DELETE" });
 
 // ─── Projects & Roles ────────────────────────────────────────
 
-export const listProjects = async (token: string) =>
-  request<{ result?: Array<{ id: string; name: string }> }>(token, "/management/v1/projects/_search", {
+export const listProjects = async (token: string): Promise<ListResponse<Project>> =>
+  request(token, "/management/v1/projects/_search", {
     method: "POST",
     body: JSON.stringify({ query: { limit: 100 } }),
   });
 
-export const listProjectRoles = async (token: string, projectId: string) =>
-  request<{ result?: ProjectRole[] }>(token, `/management/v1/projects/${projectId}/roles/_search`, {
+export const listProjectRoles = async (token: string, projectId: string): Promise<ListResponse<ProjectRole>> =>
+  request(token, `/management/v1/projects/${projectId}/roles/_search`, {
     method: "POST",
     body: JSON.stringify({}),
   });

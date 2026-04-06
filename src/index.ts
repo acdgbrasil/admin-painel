@@ -6,7 +6,7 @@ import {
   exchangeCodeForSession,
   getLogoutUrl,
   COOKIE_OPTIONS,
-  COOKIE_NAME_EXPORT,
+  COOKIE_NAME,
   type Session,
 } from "./auth";
 import {
@@ -31,11 +31,32 @@ import { userNewPage } from "./views/user-new";
 const PORT = Number(process.env["PORT"] ?? 3000);
 const HOST = process.env["HOST"] ?? "0.0.0.0";
 
-// ─── Auth middleware helper ──────────────────────────────────
+// ─── Auth helper ─────────────────────────────────────────────
 
-const requireAuth = async (cookie: Record<string, { value: string }>): Promise<Session | null> => {
-  const sessionCookie = cookie[COOKIE_NAME_EXPORT];
+type CookieJar = Record<string, { readonly value: string } | undefined>;
+
+const requireAuth = async (cookie: CookieJar): Promise<Session | null> => {
+  const sessionCookie = cookie[COOKIE_NAME];
   return getSession(sessionCookie?.value);
+};
+
+const htmlResponse = (body: string, status = 200): Response =>
+  new Response(body, { status, headers: { "Content-Type": "text/html" } });
+
+// ─── Form parsing helper ─────────────────────────────────────
+
+const formField = (body: unknown, key: string): string => {
+  if (typeof body !== "object" || body === null) return "";
+  const value = (body as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : "";
+};
+
+const formFieldArray = (body: unknown, key: string): readonly string[] => {
+  if (typeof body !== "object" || body === null) return [];
+  const value = (body as Record<string, unknown>)[key];
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.filter((v): v is string => typeof v === "string");
+  return [];
 };
 
 // ─── App ─────────────────────────────────────────────────────
@@ -44,7 +65,7 @@ const app = new Elysia()
   .use(html())
 
   // ─── Auth routes ─────────────────────────────────────────
-  .get("/login", () => new Response(loginPage(), { headers: { "Content-Type": "text/html" } }))
+  .get("/login", () => htmlResponse(loginPage()))
 
   .get("/auth/login", async () => {
     const url = await getLoginUrl();
@@ -53,11 +74,11 @@ const app = new Elysia()
 
   .get("/auth/callback", async ({ query, cookie }) => {
     const code = query["code"];
-    if (!code) return Response.redirect("/login", 302);
+    if (typeof code !== "string" || !code) return Response.redirect("/login", 302);
 
     try {
-      const { session, cookie: signedCookie } = await exchangeCodeForSession(code);
-      cookie[COOKIE_NAME_EXPORT]!.set({
+      const { cookie: signedCookie } = await exchangeCodeForSession(code);
+      cookie[COOKIE_NAME]!.set({
         value: signedCookie,
         httpOnly: COOKIE_OPTIONS.httpOnly,
         secure: COOKIE_OPTIONS.secure,
@@ -65,17 +86,16 @@ const app = new Elysia()
         path: COOKIE_OPTIONS.path,
         maxAge: COOKIE_OPTIONS.maxAge,
       });
-      void session;
       return Response.redirect("/users", 302);
     } catch (err) {
-      console.error("[auth] Callback error:", err);
+      console.error("[auth] Callback error:", err instanceof Error ? err.message : err);
       return Response.redirect("/login", 302);
     }
   })
 
   .get("/auth/logout", async ({ cookie }) => {
-    const session = await requireAuth(cookie as Record<string, { value: string }>);
-    cookie[COOKIE_NAME_EXPORT]!.set({ value: "", maxAge: 0, path: "/" });
+    const session = await requireAuth(cookie as CookieJar);
+    cookie[COOKIE_NAME]!.set({ value: "", maxAge: 0, path: "/" });
 
     if (session) {
       const url = await getLogoutUrl(session.idToken);
@@ -88,67 +108,63 @@ const app = new Elysia()
   .get("/", ({ redirect }) => redirect("/users"))
 
   .get("/users", async ({ query, cookie }) => {
-    const session = await requireAuth(cookie as Record<string, { value: string }>);
+    const session = await requireAuth(cookie as CookieJar);
     if (!session) return Response.redirect("/login", 302);
 
-    const search = query["search"] as string | undefined;
+    const search = typeof query["search"] === "string" ? query["search"] : undefined;
     const result = await listUsers(session.accessToken, search);
-    const users = result.result ?? [];
 
-    return new Response(usersPage(session, users, search), {
-      headers: { "Content-Type": "text/html" },
-    });
+    return htmlResponse(usersPage(session, result.result ?? []));
   })
 
   .get("/users/new", async ({ cookie }) => {
-    const session = await requireAuth(cookie as Record<string, { value: string }>);
+    const session = await requireAuth(cookie as CookieJar);
     if (!session) return Response.redirect("/login", 302);
 
-    return new Response(userNewPage(session), {
-      headers: { "Content-Type": "text/html" },
-    });
+    return htmlResponse(userNewPage(session));
   })
 
   .post("/users", async ({ cookie, body }) => {
-    const session = await requireAuth(cookie as Record<string, { value: string }>);
+    const session = await requireAuth(cookie as CookieJar);
     if (!session) return Response.redirect("/login", 302);
 
-    const form = body as Record<string, string>;
     try {
       const result = await createHumanUser(session.accessToken, {
-        username: form["username"] ?? "",
-        firstName: form["firstName"] ?? "",
-        lastName: form["lastName"] ?? "",
-        email: form["email"] ?? "",
-        password: form["password"] || undefined,
+        username: formField(body, "username"),
+        firstName: formField(body, "firstName"),
+        lastName: formField(body, "lastName"),
+        email: formField(body, "email"),
+        password: formField(body, "password") || undefined,
       });
       return Response.redirect(`/users/${result.userId}`, 303);
     } catch (err) {
-      const msg = err instanceof ZitadelApiError ? `Erro ${err.status}: ${err.body}` : "Erro ao criar usuário";
-      return new Response(userNewPage(session, msg), {
-        status: 422,
-        headers: { "Content-Type": "text/html" },
-      });
+      const msg = err instanceof ZitadelApiError
+        ? `Erro ${err.status}: ${err.body}`
+        : "Erro ao criar usuário";
+      return htmlResponse(userNewPage(session, msg), 422);
     }
   })
 
   .get("/users/:id", async ({ params, cookie }) => {
-    const session = await requireAuth(cookie as Record<string, { value: string }>);
+    const session = await requireAuth(cookie as CookieJar);
     if (!session) return Response.redirect("/login", 302);
 
     const { user } = await getUser(session.accessToken, params.id);
     const grantsResult = await listUserGrants(session.accessToken, params.id);
-    const grants = grantsResult.result ?? [];
     const projectsResult = await listProjects(session.accessToken);
-    const projects = projectsResult.result ?? [];
 
-    return new Response(userDetailPage(session, user, grants, projects), {
-      headers: { "Content-Type": "text/html" },
-    });
+    return htmlResponse(
+      userDetailPage(
+        session,
+        user,
+        grantsResult.result ?? [],
+        projectsResult.result ?? [],
+      ),
+    );
   })
 
   .post("/users/:id/toggle", async ({ params, cookie }) => {
-    const session = await requireAuth(cookie as Record<string, { value: string }>);
+    const session = await requireAuth(cookie as CookieJar);
     if (!session) return new Response("Unauthorized", { status: 401 });
 
     const { user } = await getUser(session.accessToken, params.id);
@@ -158,16 +174,12 @@ const app = new Elysia()
       await reactivateUser(session.accessToken, user.userId);
     }
 
-    // Check if HTMX request — return partial, else redirect
     const { user: updated } = await getUser(session.accessToken, params.id);
-
-    return new Response(userRowPartial(updated), {
-      headers: { "Content-Type": "text/html" },
-    });
+    return htmlResponse(userRowPartial(updated));
   })
 
   .delete("/users/:id", async ({ params, cookie }) => {
-    const session = await requireAuth(cookie as Record<string, { value: string }>);
+    const session = await requireAuth(cookie as CookieJar);
     if (!session) return new Response("Unauthorized", { status: 401 });
 
     await deleteUser(session.accessToken, params.id);
@@ -176,25 +188,21 @@ const app = new Elysia()
 
   // ─── Grants ──────────────────────────────────────────────
   .post("/users/:id/grants", async ({ params, cookie, body }) => {
-    const session = await requireAuth(cookie as Record<string, { value: string }>);
+    const session = await requireAuth(cookie as CookieJar);
     if (!session) return new Response("Unauthorized", { status: 401 });
 
-    const form = body as Record<string, string | string[]>;
-    const projectId = form["projectId"] as string;
-    let roleKeys = form["roleKeys"];
-    if (typeof roleKeys === "string") roleKeys = [roleKeys];
-    if (!roleKeys || !projectId) return new Response("Bad request", { status: 400 });
+    const projectId = formField(body, "projectId");
+    const roleKeys = formFieldArray(body, "roleKeys");
+    if (!projectId || roleKeys.length === 0) return new Response("Bad request", { status: 400 });
 
-    await addUserGrant(session.accessToken, params.id, projectId, roleKeys as string[]);
+    await addUserGrant(session.accessToken, params.id, projectId, roleKeys);
 
     const grantsResult = await listUserGrants(session.accessToken, params.id);
-    return new Response(grantsPartial(params.id, grantsResult.result ?? []), {
-      headers: { "Content-Type": "text/html" },
-    });
+    return htmlResponse(grantsPartial(params.id, grantsResult.result ?? []));
   })
 
   .delete("/users/:id/grants/:grantId", async ({ params, cookie }) => {
-    const session = await requireAuth(cookie as Record<string, { value: string }>);
+    const session = await requireAuth(cookie as CookieJar);
     if (!session) return new Response("Unauthorized", { status: 401 });
 
     await removeUserGrant(session.accessToken, params.id, params.grantId);
@@ -203,13 +211,11 @@ const app = new Elysia()
 
   // ─── API (HTMX partials) ────────────────────────────────
   .get("/api/projects/:id/roles", async ({ params, cookie }) => {
-    const session = await requireAuth(cookie as Record<string, { value: string }>);
+    const session = await requireAuth(cookie as CookieJar);
     if (!session) return new Response("Unauthorized", { status: 401 });
 
     const result = await listProjectRoles(session.accessToken, params.id);
-    return new Response(roleOptionsPartial(result.result ?? []), {
-      headers: { "Content-Type": "text/html" },
-    });
+    return htmlResponse(roleOptionsPartial(result.result ?? []));
   })
 
   .listen({ port: PORT, hostname: HOST });
