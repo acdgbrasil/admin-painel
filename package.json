@@ -28,6 +28,6 @@
     "typescript": "^5"
   },
   "overrides": {
-    "srvx": "0.11.9"
+    "srvx": "0.11.15"
   }
 }
