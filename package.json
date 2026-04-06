@@ -26,5 +26,8 @@
   "private": true,
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "overrides": {
+    "srvx": "0.11.9"
   }
 }
