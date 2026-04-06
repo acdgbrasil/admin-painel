@@ -1,29 +1,38 @@
 import { UserManager, WebStorageStateStore, type User } from "oidc-client-ts";
-import { createSignal } from "solid-js";
+import { createSignal, isServer } from "solid-js";
 
 // ─── OIDC Configuration ─────────────────────────────────────
 
 const ISSUER = "https://auth.acdgbrasil.com.br";
 const CLIENT_ID = "367357876898889878";
-const REDIRECT_URI = `${window.location.origin}/callback`;
-const POST_LOGOUT_URI = window.location.origin;
 
-const userManager = new UserManager({
-  authority: ISSUER,
-  client_id: CLIENT_ID,
-  redirect_uri: REDIRECT_URI,
-  post_logout_redirect_uri: POST_LOGOUT_URI,
-  response_type: "code",
-  scope: [
-    "openid",
-    "profile",
-    "email",
-    "urn:zitadel:iam:org:project:roles",
-    "urn:zitadel:iam:org:project:id:zitadel:aud",
-  ].join(" "),
-  userStore: new WebStorageStateStore({ store: window.sessionStorage }),
-  automaticSilentRenew: true,
-});
+let userManager: UserManager;
+
+function getUserManager(): UserManager {
+  if (!userManager) {
+    userManager = new UserManager({
+      authority: ISSUER,
+      client_id: CLIENT_ID,
+      redirect_uri: `${window.location.origin}/callback`,
+      post_logout_redirect_uri: window.location.origin,
+      response_type: "code",
+      scope: [
+        "openid",
+        "profile",
+        "email",
+        "urn:zitadel:iam:org:project:roles",
+        "urn:zitadel:iam:org:project:id:zitadel:aud",
+      ].join(" "),
+      userStore: new WebStorageStateStore({ store: window.sessionStorage }),
+      automaticSilentRenew: true,
+    });
+
+    userManager.events.addUserLoaded((u: User) => void setUser(u));
+    userManager.events.addUserUnloaded(() => void setUser(null));
+    userManager.events.addAccessTokenExpired(() => void setUser(null));
+  }
+  return userManager;
+}
 
 // ─── Reactive state ──────────────────────────────────────────
 
@@ -54,20 +63,20 @@ export const hasRole = (role: string): boolean => userRoles().includes(role);
 
 // ─── Actions ──────────────────────────────────���──────────────
 
-export const login = () => userManager.signinRedirect();
+export const login = () => getUserManager().signinRedirect();
 
 export const logout = () =>
-  userManager.signoutRedirect({ post_logout_redirect_uri: POST_LOGOUT_URI });
+  getUserManager().signoutRedirect({ post_logout_redirect_uri: window.location.origin });
 
 export const handleCallback = async (): Promise<User> => {
-  const u = await userManager.signinRedirectCallback();
+  const u = await getUserManager().signinRedirectCallback();
   setUser(u);
   return u;
 };
 
 export const restoreSession = async (): Promise<void> => {
   try {
-    const u = await userManager.getUser();
+    const u = await getUserManager().getUser();
     if (u && !u.expired) {
       setUser(u);
     }
@@ -77,12 +86,6 @@ export const restoreSession = async (): Promise<void> => {
 };
 
 export const getAccessToken = async (): Promise<string | null> => {
-  const u = await userManager.getUser();
+  const u = await getUserManager().getUser();
   return u?.access_token ?? null;
 };
-
-// ─── Events ──────────────────────────────────────────────────
-
-userManager.events.addUserLoaded((u: User) => void setUser(u));
-userManager.events.addUserUnloaded(() => void setUser(null));
-userManager.events.addAccessTokenExpired(() => void setUser(null));
