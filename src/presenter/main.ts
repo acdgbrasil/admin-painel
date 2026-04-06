@@ -1,5 +1,4 @@
-// ─── Client Entry Point (SPA) ────────────────────────────────
-// Bundled by Bun.build → public/app.js
+// ─── Client Entry Point ──────────────────────────────────────
 
 import type { SessionInfo } from "../data/model/session";
 import { createRouter } from "./core/router";
@@ -10,10 +9,6 @@ import { createApiProjectRepository } from "../data/repository/adapter/client/ap
 import { createApiPersonRepository } from "../data/repository/adapter/client/api-person-repository";
 import { createLoginViewModel } from "./viewmodel/login.vm";
 import { createUsersListViewModel } from "./viewmodel/users-list.vm";
-import { createUserDetailViewModel } from "./viewmodel/user-detail.vm";
-import { createUserCreateViewModel } from "./viewmodel/user-create.vm";
-
-// ─── Bootstrap ───────────────────────────────────────────────
 
 const boot = async (): Promise<void> => {
   const root = document.getElementById("app");
@@ -25,18 +20,15 @@ const boot = async (): Promise<void> => {
   const projectRepo = createApiProjectRepository(http);
   const personRepo = createApiPersonRepository(http);
 
-  // Fetch session info
   const sessionResult = await http.get<SessionInfo>("/api/v1/me");
   const session: SessionInfo | null = sessionResult.ok ? sessionResult.data : null;
 
   const router = createRouter();
 
-  // Public routes
   router.register("/login", () => createLoginViewModel());
 
-  // Protected routes (redirect to /login if no session)
   const guard = <T extends Record<string, string>>(
-    factory: (params: T, session: SessionInfo) => ReturnType<typeof createUsersListViewModel>,
+    factory: (params: T, s: SessionInfo) => ReturnType<typeof createLoginViewModel>,
   ) => (params: T) => {
     if (!session) {
       window.location.href = "/auth/login";
@@ -45,23 +37,16 @@ const boot = async (): Promise<void> => {
     return factory(params, session);
   };
 
-  router.register("/users", guard((_params, s) =>
+  router.register("/users", guard((_p, s) =>
     createUsersListViewModel({ userRepo, router, session: s }),
   ));
 
-  router.register("/users/new", guard((_params, s) =>
-    createUserCreateViewModel({ userRepo, personRepo, router, session: s }),
+  router.register("/users/new", guard((_p, s) =>
+    createUsersListViewModel({ userRepo, router, session: s }),
   ));
 
-  router.register("/users/:id", guard((params, s) =>
-    createUserDetailViewModel({
-      userId: params["id"]!,
-      userRepo,
-      grantRepo,
-      projectRepo,
-      router,
-      session: s,
-    }),
+  router.register("/users/:id", guard((_p, s) =>
+    createUsersListViewModel({ userRepo, router, session: s }),
   ));
 
   router.start(root);

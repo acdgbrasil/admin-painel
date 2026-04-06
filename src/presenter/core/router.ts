@@ -52,7 +52,6 @@ export const createRouter = (): Router => {
       }
     }
 
-    // Fallback: redirect to /users
     if (pathname !== "/users") {
       history.replaceState(null, "", "/users");
       resolve("/users");
@@ -64,16 +63,12 @@ export const createRouter = (): Router => {
       const { pattern, paramNames } = toRegex(path);
       routes.push({ pattern, paramNames, factory });
     },
-
     navigate: (path) => {
       history.pushState(null, "", path);
       resolve(path);
     },
-
     start: (root) => {
       rootEl = root;
-
-      // Intercept link clicks for SPA navigation
       document.addEventListener("click", (e) => {
         const anchor = (e.target as HTMLElement).closest("a[href]");
         if (!anchor) return;
@@ -83,11 +78,7 @@ export const createRouter = (): Router => {
         history.pushState(null, "", href);
         resolve(href);
       });
-
-      // Handle browser back/forward
       window.addEventListener("popstate", () => resolve(location.pathname));
-
-      // Initial route
       resolve(location.pathname);
     },
   };

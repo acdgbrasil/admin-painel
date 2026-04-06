@@ -1,9 +1,7 @@
 import type { ViewModel } from "../core/router";
-import { loginPage } from "../view/pages/login.page";
+import { LoginPage } from "../view/pages/LoginPage";
 
 export const createLoginViewModel = (): ViewModel => ({
-  mount: (root) => {
-    root.innerHTML = loginPage();
-  },
+  mount: (root) => { root.innerHTML = LoginPage(); },
   unmount: () => {},
 });

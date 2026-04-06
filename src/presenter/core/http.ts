@@ -17,28 +17,18 @@ export const createHttpClient = (): HttpClient => {
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
       };
-      if (body !== undefined) {
-        options.body = JSON.stringify(body);
-      }
+      if (body !== undefined) options.body = JSON.stringify(body);
 
       const res = await fetch(path, options);
 
       if (res.status === 401) {
-        window.location.href = "/login";
+        window.location.href = "/auth/login";
         return apiFailure(401, "Unauthorized");
       }
+      if (!res.ok) return apiFailure(res.status, await res.text());
+      if (res.status === 204 || res.headers.get("content-length") === "0") return apiSuccess(null as T);
 
-      if (!res.ok) {
-        const text = await res.text();
-        return apiFailure(res.status, text);
-      }
-
-      if (res.status === 204 || res.headers.get("content-length") === "0") {
-        return apiSuccess(null as T);
-      }
-
-      const data = (await res.json()) as T;
-      return apiSuccess(data);
+      return apiSuccess((await res.json()) as T);
     } catch (err) {
       return apiFailure(0, err instanceof Error ? err.message : "Network error");
     }
