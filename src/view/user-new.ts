@@ -27,6 +27,21 @@ export const userNewPage = (state: UserNewViewState): string =>
           </div>
         </div>
 
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">
+              CPF <span class="text-gray-400 font-normal">(opcional)</span>
+            </label>
+            <input type="text" name="cpf" pattern="\\d{11}" maxlength="11" placeholder="00000000000"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Data de nascimento</label>
+            <input type="date" name="birthDate" required
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500" />
+          </div>
+        </div>
+
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
           <input type="email" name="email" required

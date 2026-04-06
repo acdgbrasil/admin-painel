@@ -99,7 +99,7 @@ export interface ListResponse<T> {
   readonly details?: { readonly totalResult: string };
 }
 
-// ─── Create user input ───────────────────────────────────────
+// ─── Create user input (Zitadel) ─────────────────────────────
 
 export interface CreateUserInput {
   readonly username: string;
@@ -107,4 +107,22 @@ export interface CreateUserInput {
   readonly lastName: string;
   readonly email: string;
   readonly password?: string;
+}
+
+// ─── People Context ──────────────────────────────────────────
+
+export interface RegisterPersonInput {
+  readonly fullName: string;
+  readonly cpf?: string;
+  readonly birthDate: string;
+}
+
+export interface RegisterPersonResponse {
+  readonly data: { readonly id: string };
+  readonly meta: { readonly timestamp: string };
+}
+
+export interface AssignRoleInput {
+  readonly system: string;
+  readonly role: string;
 }

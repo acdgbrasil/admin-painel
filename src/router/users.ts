@@ -2,9 +2,10 @@
 
 import { Elysia } from "elysia";
 import * as api from "../model/zitadel-api";
+import * as peopleApi from "../model/people-api";
 import { toUsersListViewState, toUserRow } from "../viewmodel/users";
 import { toUserDetailViewState, toGrantsViewState, toRoleOptions } from "../viewmodel/user-detail";
-import { parseCreateUserForm, parseGrantForm } from "../viewmodel/user-form";
+import { parseCreateUserForm, parseRegisterPersonForm, parseGrantForm } from "../viewmodel/user-form";
 import { usersPage, userRowPartial } from "../view/users";
 import { userDetailPage, grantsPartial, roleOptionsPartial } from "../view/user-detail";
 import { userNewPage } from "../view/user-new";
@@ -44,21 +45,35 @@ export const usersRouter = new Elysia()
     const session = await requireAuth(cookie as CookieJar);
     if (!session) return Response.redirect("/login", 302);
 
-    const input = parseCreateUserForm(body);
-    const result = await api.createHumanUser(session.accessToken, input);
+    const viewState = { userName: session.name, userRoles: session.roles.join(", ") };
+    const zitadelInput = parseCreateUserForm(body);
 
-    if (!result.ok) {
+    // 1. Create user in Zitadel
+    const zitadelResult = await api.createHumanUser(session.accessToken, zitadelInput);
+    if (!zitadelResult.ok) {
       return htmlResponse(
-        userNewPage({
-          userName: session.name,
-          userRoles: session.roles.join(", "),
-          error: `Erro ${result.status}: ${result.message}`,
-        }),
+        userNewPage({ ...viewState, error: `Erro Zitadel: ${zitadelResult.message}` }),
         422,
       );
     }
 
-    return Response.redirect(`/users/${result.data.userId}`, 303);
+    // 2. Register person in People Context
+    const fullName = `${zitadelInput.firstName} ${zitadelInput.lastName}`.trim();
+    const personInput = parseRegisterPersonForm(body, fullName);
+
+    if (personInput.birthDate) {
+      const personResult = await peopleApi.registerPerson(
+        session.accessToken,
+        zitadelResult.data.userId,
+        personInput,
+      );
+
+      if (!personResult.ok) {
+        console.error("[people-context] Registration failed:", personResult.message);
+      }
+    }
+
+    return Response.redirect(`/users/${zitadelResult.data.userId}`, 303);
   })
 
   .get("/users/:id", async ({ params, cookie }) => {

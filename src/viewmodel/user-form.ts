@@ -1,7 +1,7 @@
 // ─── User Form ViewModel ─────────────────────────────────────
 // Parses and validates form body for user creation.
 
-import type { CreateUserInput } from "../model/types";
+import type { CreateUserInput, RegisterPersonInput } from "../model/types";
 
 // ─── Form parsing (unknown → typed) ─────────────────────────
 
@@ -25,6 +25,12 @@ export const parseCreateUserForm = (body: unknown): CreateUserInput => ({
   lastName: field(body, "lastName"),
   email: field(body, "email"),
   password: field(body, "password") || undefined,
+});
+
+export const parseRegisterPersonForm = (body: unknown, fullName: string): RegisterPersonInput => ({
+  fullName,
+  cpf: field(body, "cpf") || undefined,
+  birthDate: field(body, "birthDate"),
 });
 
 export const parseGrantForm = (body: unknown): { readonly projectId: string; readonly roleKeys: readonly string[] } => ({
