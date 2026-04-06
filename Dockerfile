@@ -19,7 +19,7 @@ LABEL org.opencontainers.image.licenses="UNLICENSED"
 WORKDIR /app
 
 COPY --from=build /app/.output /app/.output
-RUN cd .output/server && bun install --production
+RUN cd .output/server && bun install --production && bun add srvx@0.9.8
 
 ENV HOST=0.0.0.0
 ENV PORT=3000
