@@ -1,11 +1,16 @@
+// ─── Users List ViewModel ────────────────────────────────────
+
 import { createSignal, createEffect, createRoot } from "solid-js";
+import type { Accessor } from "solid-js";
 import type { ViewModel, Router } from "../core/router";
 import type { UserRepository } from "../../data/repository/port/user-repository";
 import type { SessionInfo } from "../../data/model/session";
 import type { User } from "../../data/model/user";
-import { STATE_BADGES } from "../../data/model/user";
-import { UsersListPage, type UserRow, type UsersListState } from "../view/pages/UsersListPage";
-import { showToast } from "../core/toast";
+import { createCommand, type Command } from "../core/command";
+import { apiSuccess } from "../../data/model/result";
+import { UsersListPage, type UserRowData } from "../view/pages/UsersListPage";
+
+// ─── Deps ─────────────────────────────────────────────────��──
 
 interface Deps {
   readonly userRepo: UserRepository;
@@ -13,7 +18,9 @@ interface Deps {
   readonly session: SessionInfo;
 }
 
-const BADGE_MAP: Readonly<Record<string, { bg: string; color: string; label: string }>> = {
+// ─── Badge mapping ───────────────────────────────────────────
+
+const BADGES: Readonly<Record<string, { bg: string; color: string; label: string }>> = {
   active: { bg: "rgba(79,132,72,0.12)", color: "#4F8448", label: "Ativo" },
   inactive: { bg: "rgba(166,41,13,0.1)", color: "#A6290D", label: "Inativo" },
   initial: { bg: "rgba(38,29,17,0.08)", color: "rgba(38,29,17,0.6)", label: "Pendente" },
@@ -21,8 +28,8 @@ const BADGE_MAP: Readonly<Record<string, { bg: string; color: string; label: str
   unknown: { bg: "rgba(38,29,17,0.08)", color: "rgba(38,29,17,0.6)", label: "Desconhecido" },
 };
 
-const toRow = (user: User): UserRow => {
-  const badge = BADGE_MAP[user.state] ?? BADGE_MAP["unknown"]!;
+const toRow = (user: User): UserRowData => {
+  const badge = BADGES[user.state] ?? BADGES["unknown"]!;
   return {
     userId: user.id,
     displayName: user.displayName,
@@ -35,6 +42,8 @@ const toRow = (user: User): UserRow => {
   };
 };
 
+// ─── ViewModel ───────────────────────────────────────────────
+
 export const createUsersListViewModel = (deps: Deps): ViewModel => {
   let dispose: (() => void) | null = null;
 
@@ -43,50 +52,66 @@ export const createUsersListViewModel = (deps: Deps): ViewModel => {
       createRoot((d) => {
         dispose = d;
 
-        const [loading, setLoading] = createSignal(true);
-        const [users, setUsers] = createSignal<readonly UserRow[]>([]);
+        // ── Signals ──
+        const [users, setUsers] = createSignal<readonly User[]>([]);
+        const [rows, setRows] = createSignal<readonly UserRowData[]>([]);
         const [search, setSearch] = createSignal("");
-        const [error, setError] = createSignal<string | null>(null);
-        const [total, setTotal] = createSignal(0);
-        const [activeCount, setActiveCount] = createSignal(0);
-        const [inactiveCount, setInactiveCount] = createSignal(0);
-        const [pendingCount, setPendingCount] = createSignal(0);
 
-        const fetchUsers = async (query?: string): Promise<void> => {
-          setLoading(true);
-          setError(null);
-          const result = await deps.userRepo.list(query);
-          if (result.ok) {
-            const all = result.data;
-            const rows = all.map(toRow);
-            setUsers(rows);
-            setTotal(all.length);
-            setActiveCount(all.filter((u) => u.state === "active").length);
-            setInactiveCount(all.filter((u) => u.state === "inactive").length);
-            setPendingCount(all.filter((u) => u.state === "initial").length);
-          } else {
-            setError(result.message);
-          }
-          setLoading(false);
+        // ── Commands ──
+        const loadCommand = createCommand<string | undefined, readonly User[]>(
+          async (query) => {
+            const result = await deps.userRepo.list(query);
+            if (result.ok) {
+              setUsers(result.data);
+              setRows(result.data.map(toRow));
+            }
+            return result;
+          },
+        );
+
+        // ── Derived (selectors) ──
+        const total = (): number => users().length;
+        const activeCount = (): number => users().filter((u) => u.state === "active").length;
+        const inactiveCount = (): number => users().filter((u) => u.state === "inactive").length;
+        const pendingCount = (): number => users().filter((u) => u.state === "initial").length;
+
+        // ── Connectors (actions) ──
+        const onSearch = (query: string): void => {
+          setSearch(query);
+          loadCommand.execute(query || undefined);
         };
 
-        // Render effect
+        const onClearSearch = (): void => {
+          setSearch("");
+          loadCommand.execute(undefined);
+        };
+
+        const onNavigateUser = (userId: string): void => {
+          deps.router.navigate(`/users/${userId}`);
+        };
+
+        const onCreateUser = (): void => {
+          deps.router.navigate("/users/new");
+        };
+
+        // ── Render effect ──
         createEffect(() => {
-          const state: UsersListState = {
+          root.innerHTML = UsersListPage({
+            // Selectors (data)
             session: deps.session,
-            users: users(),
+            users: rows(),
             search: search(),
-            loading: loading(),
-            error: error(),
+            loading: loadCommand.running(),
+            error: loadCommand.error(),
             total: total(),
             activeCount: activeCount(),
             inactiveCount: inactiveCount(),
             pendingCount: pendingCount(),
-          };
-          root.innerHTML = UsersListPage(state);
+            // Connectors (actions) — encoded as data-action in View
+          });
         });
 
-        // Event delegation
+        // ── Event delegation ──
         root.addEventListener("click", (e) => {
           const target = (e.target as HTMLElement).closest("[data-action]");
           if (!target) return;
@@ -94,27 +119,25 @@ export const createUsersListViewModel = (deps: Deps): ViewModel => {
 
           if (action === "navigate-user") {
             const userId = target.getAttribute("data-user-id");
-            if (userId) deps.router.navigate(`/users/${userId}`);
+            if (userId) onNavigateUser(userId);
           } else if (action === "clear-search") {
-            setSearch("");
-            fetchUsers();
+            onClearSearch();
           } else if (action === "open-create-modal") {
-            deps.router.navigate("/users/new");
+            onCreateUser();
           }
         });
 
-        // Search on enter
         root.addEventListener("keydown", (e) => {
           if (e.key === "Enter") {
             const target = e.target as HTMLInputElement;
             if (target.getAttribute("data-action") === "search") {
-              setSearch(target.value);
-              fetchUsers(target.value || undefined);
+              onSearch(target.value);
             }
           }
         });
 
-        fetchUsers();
+        // ── Initial load ──
+        loadCommand.execute(undefined);
       });
     },
 

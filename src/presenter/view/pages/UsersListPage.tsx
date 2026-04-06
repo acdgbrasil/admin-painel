@@ -5,6 +5,8 @@ import type { SessionInfo } from "../../../data/model/session";
 
 // ─── Types ───────────────────────────────────────────────────
 
+export type UserRowData = UserRow;
+
 export interface UserRow {
   readonly userId: string;
   readonly displayName: string;

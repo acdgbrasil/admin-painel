@@ -9,20 +9,24 @@ import { createApiProjectRepository } from "../data/repository/adapter/client/ap
 import { createApiPersonRepository } from "../data/repository/adapter/client/api-person-repository";
 import { createLoginViewModel } from "./viewmodel/login.vm";
 import { createUsersListViewModel } from "./viewmodel/users-list.vm";
+import { createUserDetailViewModel } from "./viewmodel/user-detail.vm";
 
 const boot = async (): Promise<void> => {
   const root = document.getElementById("app");
   if (!root) return;
 
+  // ── DI: Repositories ──
   const http = createHttpClient();
   const userRepo = createApiUserRepository(http);
   const grantRepo = createApiGrantRepository(http);
   const projectRepo = createApiProjectRepository(http);
   const personRepo = createApiPersonRepository(http);
 
+  // ── Session ──
   const sessionResult = await http.get<SessionInfo>("/api/v1/me");
   const session: SessionInfo | null = sessionResult.ok ? sessionResult.data : null;
 
+  // ── Router + DI wiring ──
   const router = createRouter();
 
   router.register("/login", () => createLoginViewModel());
@@ -45,8 +49,15 @@ const boot = async (): Promise<void> => {
     createUsersListViewModel({ userRepo, router, session: s }),
   ));
 
-  router.register("/users/:id", guard((_p, s) =>
-    createUsersListViewModel({ userRepo, router, session: s }),
+  router.register("/users/:id", guard((p, s) =>
+    createUserDetailViewModel({
+      userId: p["id"]!,
+      userRepo,
+      grantRepo,
+      projectRepo,
+      router,
+      session: s,
+    }),
   ));
 
   router.start(root);
