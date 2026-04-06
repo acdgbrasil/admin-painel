@@ -1,0 +1,15 @@
+name: Build and push image
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+jobs:
+  build:
+    uses: acdgbrasil/.github/.github/workflows/reusable-ghcr-build-push.yml@main
+    with:
+      service: admin-painel
+    permissions:
+      contents: read
+      packages: write
