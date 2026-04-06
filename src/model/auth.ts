@@ -1,8 +1,7 @@
 // ─── OIDC Server-Side Auth (Authorization Code Flow) ─────────
-//
-// Implements OIDC against Zitadel without any client library.
-// Three HTTP calls: authorize redirect, token exchange, userinfo.
-// Token stored in signed httpOnly cookie.
+
+import type { Session } from "./types";
+import { isSession } from "./types";
 
 // ─── Config ──────────────────────────────────────────────────
 
@@ -25,7 +24,14 @@ const SCOPES = [
 const SCOPE_STRING = SCOPES.join(" ");
 
 export const COOKIE_NAME = "__session";
-const COOKIE_MAX_AGE_S = 3600;
+
+export const COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: BASE_URL.startsWith("https"),
+  sameSite: "lax" as const,
+  path: "/",
+  maxAge: 3600,
+} as const;
 
 // ─── OIDC Discovery (lazy, cached) ──────────────────────────
 
@@ -46,15 +52,12 @@ const isOidcConfig = (value: unknown): value is OidcConfig =>
 
 let cachedOidcConfig: OidcConfig | null = null;
 
-const getOidcConfig = async (): Promise<OidcConfig> => {
+const discoverOidc = async (): Promise<OidcConfig> => {
   if (cachedOidcConfig) return cachedOidcConfig;
-
   const res = await fetch(`${ISSUER}/.well-known/openid-configuration`);
   if (!res.ok) throw new Error(`OIDC discovery failed: ${res.status}`);
-
   const body: unknown = await res.json();
   if (!isOidcConfig(body)) throw new Error("Invalid OIDC discovery response");
-
   cachedOidcConfig = body;
   return body;
 };
@@ -72,7 +75,7 @@ const getSigningKey = (): Promise<CryptoKey> =>
     ["sign", "verify"],
   );
 
-const sign = async (payload: string): Promise<string> => {
+const signPayload = async (payload: string): Promise<string> => {
   const key = await getSigningKey();
   const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
   const sigB64 = Buffer.from(sig).toString("base64url");
@@ -80,13 +83,11 @@ const sign = async (payload: string): Promise<string> => {
   return `${payloadB64}.${sigB64}`;
 };
 
-const verify = async (cookie: string): Promise<string | null> => {
+const verifySignature = async (cookie: string): Promise<string | null> => {
   const dotIndex = cookie.indexOf(".");
   if (dotIndex === -1) return null;
-
   const payloadB64 = cookie.slice(0, dotIndex);
   const sigB64 = cookie.slice(dotIndex + 1);
-
   const key = await getSigningKey();
   const sig = Buffer.from(sigB64, "base64url");
   const payload = Buffer.from(payloadB64, "base64url").toString();
@@ -94,33 +95,12 @@ const verify = async (cookie: string): Promise<string | null> => {
   return valid ? payload : null;
 };
 
-// ─── Session types ───────────────────────────────────────────
-
-export interface Session {
-  readonly accessToken: string;
-  readonly idToken: string;
-  readonly name: string;
-  readonly email: string;
-  readonly roles: readonly string[];
-  readonly expiresAt: number;
-}
-
-const isSession = (value: unknown): value is Session =>
-  typeof value === "object" &&
-  value !== null &&
-  "accessToken" in value &&
-  "idToken" in value &&
-  "expiresAt" in value &&
-  typeof (value as { expiresAt: unknown }).expiresAt === "number";
-
 // ─── Public API ──────────────────────────────────────────────
 
-export const getSession = async (cookie: string | undefined): Promise<Session | null> => {
-  if (!cookie) return null;
-
-  const payload = await verify(cookie);
+export const getSession = async (cookieValue: string | undefined): Promise<Session | null> => {
+  if (!cookieValue) return null;
+  const payload = await verifySignature(cookieValue);
   if (!payload) return null;
-
   try {
     const parsed: unknown = JSON.parse(payload);
     if (!isSession(parsed)) return null;
@@ -132,7 +112,7 @@ export const getSession = async (cookie: string | undefined): Promise<Session | 
 };
 
 export const getLoginUrl = async (): Promise<string> => {
-  const config = await getOidcConfig();
+  const config = await discoverOidc();
   const params = new URLSearchParams({
     response_type: "code",
     client_id: CLIENT_ID,
@@ -161,28 +141,27 @@ interface UserinfoResponse {
   readonly "urn:zitadel:iam:org:project:roles"?: Record<string, unknown>;
 }
 
-export const exchangeCodeForSession = async (
+export const exchangeCode = async (
   code: string,
-): Promise<{ readonly session: Session; readonly cookie: string }> => {
-  const config = await getOidcConfig();
+): Promise<{ readonly session: Session; readonly signedCookie: string }> => {
+  const config = await discoverOidc();
 
-  const tokenBody = new URLSearchParams({
+  const body = new URLSearchParams({
     grant_type: "authorization_code",
     code,
     redirect_uri: REDIRECT_URI,
     client_id: CLIENT_ID,
   });
-  if (CLIENT_SECRET) tokenBody.set("client_secret", CLIENT_SECRET);
+  if (CLIENT_SECRET) body.set("client_secret", CLIENT_SECRET);
 
   const tokenRes = await fetch(config.token_endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: tokenBody,
+    body,
   });
-
   if (!tokenRes.ok) {
-    const body = await tokenRes.text();
-    throw new Error(`Token exchange failed: ${tokenRes.status} ${body}`);
+    const text = await tokenRes.text();
+    throw new Error(`Token exchange failed: ${tokenRes.status} ${text}`);
   }
 
   const tokenData: unknown = await tokenRes.json();
@@ -195,34 +174,25 @@ export const exchangeCodeForSession = async (
 
   const userinfo = (await userinfoRes.json()) as UserinfoResponse;
   const roleClaim = userinfo["urn:zitadel:iam:org:project:roles"];
-  const roles = roleClaim ? Object.keys(roleClaim) : [];
 
   const session: Session = {
     accessToken: tokenData.access_token,
     idToken: tokenData.id_token,
     name: userinfo.name ?? "",
     email: userinfo.email ?? "",
-    roles,
+    roles: roleClaim ? Object.keys(roleClaim) : [],
     expiresAt: Math.floor(Date.now() / 1000) + tokenData.expires_in,
   };
 
-  const cookie = await sign(JSON.stringify(session));
-  return { session, cookie };
+  const signedCookie = await signPayload(JSON.stringify(session));
+  return { session, signedCookie };
 };
 
 export const getLogoutUrl = async (idToken: string): Promise<string> => {
-  const config = await getOidcConfig();
+  const config = await discoverOidc();
   const params = new URLSearchParams({
     id_token_hint: idToken,
     post_logout_redirect_uri: POST_LOGOUT_URI,
   });
   return `${config.end_session_endpoint}?${params}`;
 };
-
-export const COOKIE_OPTIONS = {
-  httpOnly: true,
-  secure: BASE_URL.startsWith("https"),
-  sameSite: "lax" as const,
-  path: "/",
-  maxAge: COOKIE_MAX_AGE_S,
-} as const;

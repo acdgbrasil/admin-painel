@@ -1,6 +1,12 @@
-import type { Session } from "../auth";
+// ─── HTML Layout ─────────────────────────────────────────────
+// Base template. Nav is shown when session info is provided.
 
-export const layout = (content: string, session?: Session | null) => `<!DOCTYPE html>
+interface NavState {
+  readonly userName: string;
+  readonly userRoles: string;
+}
+
+export const layout = (content: string, nav?: NavState): string => `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
@@ -10,12 +16,12 @@ export const layout = (content: string, session?: Session | null) => `<!DOCTYPE 
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
 </head>
 <body class="bg-gray-100 min-h-screen" hx-boost="true">
-  ${session ? nav(session) : ""}
+  ${nav ? renderNav(nav) : ""}
   ${content}
 </body>
 </html>`;
 
-const nav = (session: Session) => `
+const renderNav = (nav: NavState): string => `
 <nav class="bg-sky-800">
   <div class="container mx-auto flex items-center justify-between p-3 text-gray-200">
     <div class="flex items-center gap-1">
@@ -28,8 +34,8 @@ const nav = (session: Session) => `
     </div>
     <div class="flex items-center gap-4">
       <div class="text-sm text-right">
-        <p class="text-white font-medium">${esc(session.name)}</p>
-        <p class="text-sky-300 text-xs">${esc(session.roles.join(", "))}</p>
+        <p class="text-white font-medium">${esc(nav.userName)}</p>
+        <p class="text-sky-300 text-xs">${esc(nav.userRoles)}</p>
       </div>
       <a href="/auth/logout" class="px-3 py-1.5 text-sm bg-sky-700 hover:bg-sky-600 rounded transition-colors">
         Sair
@@ -38,5 +44,5 @@ const nav = (session: Session) => `
   </div>
 </nav>`;
 
-export const esc = (s: string) =>
+export const esc = (s: string): string =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
