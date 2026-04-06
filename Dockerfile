@@ -7,12 +7,12 @@ LABEL org.opencontainers.image.licenses="UNLICENSED"
 
 WORKDIR /app
 
-COPY package.json bun.lock ./
+COPY package.json bun.lock tsconfig.json ./
 RUN bun install --frozen-lockfile --production
 
 COPY src/ src/
 
-# Build client bundle
+# Build client bundle (reads tsconfig.json for jsxImportSource: @kitajs/html)
 RUN bun src/build.ts
 
 ENV HOST=0.0.0.0
