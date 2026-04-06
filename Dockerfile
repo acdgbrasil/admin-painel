@@ -19,6 +19,7 @@ LABEL org.opencontainers.image.licenses="UNLICENSED"
 WORKDIR /app
 
 COPY --from=build /app/.output /app/.output
+RUN cd .output/server && bun install --production
 
 ENV HOST=0.0.0.0
 ENV PORT=3000
